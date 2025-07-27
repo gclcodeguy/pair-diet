@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 
 // Import screens
 import DashboardScreen from '../screens/DashboardScreen';
@@ -43,9 +44,9 @@ function MainTabs() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E5E5EA',
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          paddingBottom: Platform.OS === 'ios' ? 34 : 10, // Extra padding for iPhone home indicator
+          paddingTop: 10,
+          height: Platform.OS === 'ios' ? 88 : 60, // Increased height for iOS
         },
         headerStyle: {
           backgroundColor: '#FF6B35',
