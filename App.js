@@ -1,10 +1,12 @@
+import 'react-native-gesture-handler';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import HomeScreen from './screens/HomeScreen';
+import AppNavigator from './navigation/AppNavigator';
 
 export default function App() {
   return (
     <>
-      <HomeScreen />
+      <AppNavigator />
       <StatusBar style="auto" />
     </>
   );

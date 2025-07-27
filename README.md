@@ -1,4 +1,4 @@
-# 🏋️‍♂️ BurpeeBet
+`# 🏋️‍♂️ BurpeeBet
 
 **BurpeeBet** is a social nutrition tracking app that turns dieting into a challenge of accountability, pain, and partnership.
 
