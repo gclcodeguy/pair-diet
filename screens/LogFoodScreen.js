@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SwipeListView } from 'react-native-swipe-list-view';
 import { supabase } from '../utils/supabase';
 
 const LogFoodScreen = () => {
@@ -24,6 +25,7 @@ const LogFoodScreen = () => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const swipeListRef = useRef(null);
 
   // Get current user on component mount
   useEffect(() => {
@@ -220,18 +222,23 @@ const LogFoodScreen = () => {
 
   // Delete food log entry
   const deleteFoodLog = async (foodLogId) => {
+    console.log('Attempting to delete food log:', foodLogId);
     try {
       setLoading(true);
       const { error } = await supabase
         .from('food_logs')
         .delete()
         .eq('id', foodLogId)
-        .eq('user_id', user.id); // Ensure user can only delete their own logs
+        .eq('user_id', user.id);
 
       if (error) {
         console.error('Error deleting food log:', error);
         Alert.alert('Error', 'Failed to delete food log');
       } else {
+        console.log('Successfully deleted food log:', foodLogId);
+        // Immediately remove from local state for better UX
+        setTodayLog(prevLog => prevLog.filter(item => item.id !== foodLogId));
+        // Then refresh from server to ensure consistency
         fetchFoodLog();
       }
     } catch (error) {
@@ -285,32 +292,6 @@ const LogFoodScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderLogItem = ({ item }) => {
-    // Format the created_at time to show when it was logged
-    const loggedTime = new Date(item.created_at).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    return (
-      <View style={styles.logItem}>
-        <View style={styles.logInfo}>
-          <Text style={styles.logFoodName}>{item.food_name}</Text>
-          <Text style={styles.logTime}>{loggedTime}</Text>
-        </View>
-        <View style={styles.logActions}>
-          <Text style={styles.logCalories}>{item.calories} cal</Text>
-          <TouchableOpacity
-            onPress={() => deleteFoodLog(item.id)}
-            disabled={loading}
-          >
-            <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
   const renderMealButton = meal => (
     <TouchableOpacity
       key={meal.id}
@@ -338,155 +319,182 @@ const LogFoodScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header with calorie summary */}
-        <View style={styles.header}>
-          <View style={styles.calorieSummary}>
-            <Text style={styles.calorieTitle}>Today's Calories</Text>
-            <Text style={styles.calorieNumber}>{totalCalories}</Text>
-            <Text style={styles.calorieGoal}>/ {dailyGoal} goal</Text>
-          </View>
-          <View style={styles.progressRing}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min((totalCalories / dailyGoal) * 100, 100)}%`,
-                },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Date Selector */}
-        <View style={styles.dateSelector}>
-          <TouchableOpacity onPress={goToPreviousDay} disabled={loading}>
-            <Ionicons name="chevron-left" size={24} color="#8E8E93" />
-          </TouchableOpacity>
-          <View style={styles.dateSelectorCenter}>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
-            <TouchableOpacity onPress={goToToday} disabled={loading}>
-              <Text style={styles.todayButton}>Today</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={goToNextDay} disabled={loading}>
-            <Ionicons name="chevron-right" size={24} color="#8E8E93" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Meal selection */}
-        <View style={styles.mealSection}>
-          <Text style={styles.sectionTitle}>Select Meal</Text>
-          <View style={styles.mealButtons}>{meals.map(renderMealButton)}</View>
-        </View>
-
-        {/* Food Log by Meal */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Food Log</Text>
-            <Text style={styles.remainingCalories}>
-              {remainingCalories > 0
-                ? `${remainingCalories} remaining`
-                : `${Math.abs(remainingCalories)} over`}
-            </Text>
-          </View>
-          
-          {Object.entries(groupFoodsByMeal()).map(([mealType, foods]) => {
-            if (foods.length === 0) return null;
-            
-            const mealCalories = calculateMealCalories(foods);
-            const mealInfo = meals.find(m => m.id === mealType);
-            
-            return (
-              <View key={mealType} style={styles.mealGroup}>
-                <View style={styles.mealGroupHeader}>
-                  <View style={styles.mealGroupTitle}>
-                    <Ionicons 
-                      name={mealInfo?.icon || 'restaurant'} 
-                      size={20} 
-                      color={mealInfo?.color || '#8E8E93'} 
-                    />
-                    <Text style={styles.mealGroupName}>
-                      {mealInfo?.name || mealType.charAt(0).toUpperCase() + mealType.slice(1)}
-                    </Text>
-                  </View>
-                  <Text style={styles.mealGroupCalories}>{mealCalories} cal</Text>
-                </View>
-                
-                {foods.map((food) => (
-                  <View key={food.id} style={styles.logItem}>
-                    <View style={styles.logInfo}>
-                      <Text style={styles.logFoodName}>{food.food_name}</Text>
-                      <Text style={styles.logTime}>
-                        {new Date(food.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
-                    </View>
-                    <View style={styles.logActions}>
-                      <Text style={styles.logCalories}>{food.calories} cal</Text>
-                      <TouchableOpacity
-                        onPress={() => deleteFoodLog(food.id)}
-                        disabled={loading}
-                      >
-                        <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
+      <FlatList
+        data={[{ key: 'content' }]}
+        renderItem={() => (
+          <>
+            {/* Header with calorie summary */}
+            <View style={styles.header}>
+              <View style={styles.calorieSummary}>
+                <Text style={styles.calorieTitle}>Today's Calories</Text>
+                <Text style={styles.calorieNumber}>{totalCalories}</Text>
+                <Text style={styles.calorieGoal}>/ {dailyGoal} goal</Text>
               </View>
-            );
-          })}
-          
-          {todayLog.length === 0 && (
-            <View style={styles.emptyState}>
-              <Ionicons name="restaurant-outline" size={48} color="#8E8E93" />
-              <Text style={styles.emptyStateText}>No food logged yet</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Start by adding some food to your log
-              </Text>
+              <View style={styles.progressRing}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.min((totalCalories / dailyGoal) * 100, 100)}%`,
+                    },
+                  ]}
+                />
+              </View>
             </View>
-          )}
-        </View>
 
-        {/* Search Food */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Search Food</Text>
-            <TouchableOpacity
-              style={styles.manualButton}
-              onPress={() => setShowManualEntry(true)}
-            >
-              <Ionicons name="add" size={20} color="#FF6B35" />
-              <Text style={styles.manualButtonText}>Manual Entry</Text>
-            </TouchableOpacity>
-          </View>
+            {/* Date Selector */}
+            <View style={styles.dateSelector}>
+              <TouchableOpacity onPress={goToPreviousDay} disabled={loading}>
+                <Ionicons name="chevron-left" size={24} color="#8E8E93" />
+              </TouchableOpacity>
+              <View style={styles.dateSelectorCenter}>
+                <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+                <TouchableOpacity onPress={goToToday} disabled={loading}>
+                  <Text style={styles.todayButton}>Today</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity onPress={goToNextDay} disabled={loading}>
+                <Ionicons name="chevron-right" size={24} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search"
-              size={20}
-              color="#8E8E93"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search for food..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
+            {/* Meal selection */}
+            <View style={styles.mealSection}>
+              <Text style={styles.sectionTitle}>Select Meal</Text>
+              <View style={styles.mealButtons}>{meals.map(renderMealButton)}</View>
+            </View>
 
-          <FlatList
-            data={filteredFood}
-            renderItem={renderFoodItem}
-            keyExtractor={item => item.id.toString()}
-            scrollEnabled={false}
-            style={styles.foodList}
-          />
-        </View>
-      </ScrollView>
+            {/* Food Log by Meal */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Food Log</Text>
+                <Text style={styles.remainingCalories}>
+                  {remainingCalories > 0
+                    ? `${remainingCalories} remaining`
+                    : `${Math.abs(remainingCalories)} over`}
+                </Text>
+              </View>
+              
+              {Object.entries(groupFoodsByMeal()).map(([mealType, foods]) => {
+                if (foods.length === 0) return null;
+                
+                const mealCalories = calculateMealCalories(foods);
+                const mealInfo = meals.find(m => m.id === mealType);
+                
+                return (
+                  <View key={mealType} style={styles.mealGroup}>
+                    <View style={styles.mealGroupHeader}>
+                      <View style={styles.mealGroupTitle}>
+                        <Ionicons 
+                          name={mealInfo?.icon || 'restaurant'} 
+                          size={20} 
+                          color={mealInfo?.color || '#8E8E93'} 
+                        />
+                        <Text style={styles.mealGroupName}>
+                          {mealInfo?.name || mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+                        </Text>
+                      </View>
+                      <Text style={styles.mealGroupCalories}>{mealCalories} cal</Text>
+                    </View>
+                    
+                    <SwipeListView
+                      ref={swipeListRef}
+                      data={foods}
+                      renderItem={(data, index) => (
+                        <View style={styles.logItem}>
+                          <View style={styles.logInfo}>
+                            <Text style={styles.logFoodName}>{data.item.food_name}</Text>
+                            <Text style={styles.logTime}>
+                              {new Date(data.item.created_at).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </Text>
+                          </View>
+                          <View style={styles.logActions}>
+                            <Text style={styles.logCalories}>{data.item.calories} cal</Text>
+                          </View>
+                        </View>
+                      )}
+                      renderHiddenItem={(data, index) => (
+                        <View style={styles.swipeDeleteButton}>
+                          {/* Empty view - no visual delete button */}
+                        </View>
+                      )}
+                      rightOpenValue={-100}
+                      disableRightSwipe
+                      keyExtractor={(item) => item.id.toString()}
+                      showsVerticalScrollIndicator={false}
+                      friction={2}
+                      tension={40}
+                      swipeToOpenPercent={30}
+                      closeOnRowPress={true}
+                      closeOnScroll={true}
+                      onRowDidOpen={(rowKey, rowMap) => {
+                        console.log('Row opened, deleting item:', rowKey);
+                        deleteFoodLog(rowKey);
+                        // Close the row after deletion using the rowMap
+                        if (rowMap[rowKey]) {
+                          rowMap[rowKey].closeRow();
+                        }
+                      }}
+                    />
+                  </View>
+                );
+              })}
+              
+              {todayLog.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Ionicons name="restaurant-outline" size={48} color="#8E8E93" />
+                  <Text style={styles.emptyStateText}>No food logged yet</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    Start by adding some food to your log
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Search Food */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Search Food</Text>
+                <TouchableOpacity
+                  style={styles.manualButton}
+                  onPress={() => setShowManualEntry(true)}
+                >
+                  <Ionicons name="add" size={20} color="#FF6B35" />
+                  <Text style={styles.manualButtonText}>Manual Entry</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <Ionicons
+                  name="search"
+                  size={20}
+                  color="#8E8E93"
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search for food..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              <FlatList
+                data={filteredFood}
+                renderItem={renderFoodItem}
+                keyExtractor={item => item.id.toString()}
+                scrollEnabled={false}
+                style={styles.foodList}
+              />
+            </View>
+          </>
+        )}
+        keyExtractor={(item) => item.key}
+        showsVerticalScrollIndicator={false}
+      />
 
       {/* Manual Entry Modal */}
       <Modal
@@ -852,6 +860,17 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontSize: 14,
     marginTop: 5,
+  },
+  swipeDeleteButton: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 8,
+    justifyContent: 'center',
+    width: 100,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
 });
 
