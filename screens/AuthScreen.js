@@ -9,38 +9,51 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// import { supabase } from '../lib/supabase';
+import { supabase } from '../utils/supabase';
+
+// Tells Supabase Auth to continuously refresh the session automatically if
+// the app is in the foreground. When this is added, you will continue to receive
+// `onAuthStateChange` events with the `TOKEN_REFRESHED` or `SIGNED_OUT` event
+// if the user's session is terminated. This should only be registered once.
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
+});
 
 const AuthScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const handleAuth = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
+  async function signInWithEmail() {
     setLoading(true);
-    try {
-      // Temporarily mock authentication for MVP
-      if (isLogin) {
-        // Mock login - just show success
-        Alert.alert('Success', 'Mock login successful!');
-      } else {
-        // Mock signup - just show success
-        Alert.alert('Success', 'Mock account created!');
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+    if (error) Alert.alert(error.message);
+    setLoading(false);
+  }
+
+  async function signUpWithEmail() {
+    setLoading(true);
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+    });
+    if (error) Alert.alert(error.message);
+    if (!session) Alert.alert('Please check your inbox for email verification!');
+    setLoading(false);
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -54,9 +67,7 @@ const AuthScreen = () => {
             <Ionicons name="fitness" size={60} color="#FF6B35" />
           </View>
           <Text style={styles.title}>BurpeeBet</Text>
-          <Text style={styles.subtitle}>
-            {isLogin ? 'Welcome back!' : 'Join the challenge!'}
-          </Text>
+          <Text style={styles.subtitle}>Join the challenge!</Text>
         </View>
 
         {/* Auth Form */}
@@ -91,40 +102,29 @@ const AuthScreen = () => {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoCapitalize="none"
             />
           </View>
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleAuth}
+            onPress={signInWithEmail}
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Loading...' : isLogin ? 'Sign In' : 'Sign Up'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.switchButton}
-            onPress={() => setIsLogin(!isLogin)}
+            style={[styles.button, styles.secondaryButton, loading && styles.buttonDisabled]}
+            onPress={signUpWithEmail}
+            disabled={loading}
           >
-            <Text style={styles.switchText}>
-              {isLogin
-                ? "Don't have an account? Sign Up"
-                : 'Already have an account? Sign In'}
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+              {loading ? 'Creating account...' : 'Sign Up'}
             </Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Gamification Elements */}
-        <View style={styles.gamification}>
-          <Text style={styles.gamificationText}>🏆 Challenge your friends</Text>
-          <Text style={styles.gamificationText}>
-            💪 Turn calories into burpees
-          </Text>
-          <Text style={styles.gamificationText}>
-            🔥 Stay accountable together
-          </Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -132,105 +132,75 @@ const AuthScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  button: {
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  header: {
     alignItems: 'center',
+    marginBottom: 50,
+  },
+  logoContainer: {
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FF6B35',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+  form: {
+    width: '100%',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#000000',
+  },
+  button: {
     backgroundColor: '#FF6B35',
     borderRadius: 12,
-    elevation: 8,
-    height: 50,
-    justifyContent: 'center',
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#FF6B35',
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  container: {
-    backgroundColor: '#F8F9FA',
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-  },
-  form: {
-    marginBottom: 40,
-  },
-  gamification: {
-    alignItems: 'center',
-  },
-  gamificationText: {
-    color: '#8E8E93',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 50,
-  },
-  input: {
-    color: '#1A1A1A',
-    flex: 1,
-    fontSize: 16,
-    height: 50,
-  },
-  inputContainer: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    elevation: 2,
-    flexDirection: 'row',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 50,
-    elevation: 8,
-    height: 100,
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    width: 100,
-  },
-  subtitle: {
-    color: '#8E8E93',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  switchButton: {
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  switchText: {
+  secondaryButtonText: {
     color: '#FF6B35',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  title: {
-    color: '#1A1A1A',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
   },
 });
 

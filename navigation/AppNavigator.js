@@ -1,22 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { supabase } from '../utils/supabase';
 
-// Import screens
+// Screen imports
+import AuthScreen from '../screens/AuthScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import ChallengesScreen from '../screens/ChallengesScreen';
 import LogFoodScreen from '../screens/LogFoodScreen';
 import PenaltiesScreen from '../screens/PenaltiesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import AuthScreen from '../screens/AuthScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// Main tab navigator
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -57,47 +57,35 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen 
-        name="Dashboard" 
-        component={DashboardScreen}
-        options={{ title: 'BurpeeBet' }}
-      />
-      <Tab.Screen 
-        name="Challenges" 
-        component={ChallengesScreen}
-        options={{ title: 'Challenges' }}
-      />
-      <Tab.Screen 
-        name="Log Food" 
-        component={LogFoodScreen}
-        options={{ title: 'Log Food' }}
-      />
-      <Tab.Screen 
-        name="Penalties" 
-        component={PenaltiesScreen}
-        options={{ title: 'Penalties' }}
-      />
-      <Tab.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
-      />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Challenges" component={ChallengesScreen} />
+      <Tab.Screen name="Log Food" component={LogFoodScreen} />
+      <Tab.Screen name="Penalties" component={PenaltiesScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
 
-// Root navigator with auth
 export default function AppNavigator() {
-  // For now, always show the main app (skip auth for MVP)
-  const isAuthenticated = true;
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+  }, []);
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          <Stack.Screen name="Auth" component={AuthScreen} />
-        ) : (
+        {session && session.user ? (
           <Stack.Screen name="Main" component={MainTabs} />
+        ) : (
+          <Stack.Screen name="Auth" component={AuthScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
