@@ -13,4 +13,5 @@ export const supabase = createClient(
       detectSessionInUrl: false,
       lock: processLock,
     },
-  }) 
+  })
+        

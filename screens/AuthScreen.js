@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+// import { supabase } from '../lib/supabase';
 
 const AuthScreen = () => {
   const [email, setEmail] = useState('');
@@ -27,19 +27,13 @@ const AuthScreen = () => {
 
     setLoading(true);
     try {
+      // Temporarily mock authentication for MVP
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        // Mock login - just show success
+        Alert.alert('Success', 'Mock login successful!');
       } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        Alert.alert('Success', 'Account created! Please check your email.');
+        // Mock signup - just show success
+        Alert.alert('Success', 'Mock account created!');
       }
     } catch (error) {
       Alert.alert('Error', error.message);
