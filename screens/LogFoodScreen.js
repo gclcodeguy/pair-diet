@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   TextInput,
   FlatList,
   Modal,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../utils/supabase';
 
 const LogFoodScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,22 +20,227 @@ const LogFoodScreen = () => {
   const [manualFood, setManualFood] = useState('');
   const [manualCalories, setManualCalories] = useState('');
   const [selectedMeal, setSelectedMeal] = useState('breakfast');
-  const [todayLog, setTodayLog] = useState([
-    {
-      id: 1,
-      name: 'Oatmeal with berries',
-      calories: 320,
-      meal: 'breakfast',
-      time: '8:30 AM',
-    },
-    {
-      id: 2,
-      name: 'Chicken salad',
-      calories: 450,
-      meal: 'lunch',
-      time: '12:15 PM',
-    },
-  ]);
+  const [todayLog, setTodayLog] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  // Get current user on component mount
+  useEffect(() => {
+    getCurrentUser();
+  }, []);
+
+  // Fetch food log when user or date changes
+  useEffect(() => {
+    if (user) {
+      fetchFoodLog();
+    }
+  }, [user, selectedDate]);
+
+  const getCurrentUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    } catch (error) {
+      console.error('Error getting user:', error);
+    }
+  };
+
+  // Fetch food log for selected date from Supabase
+  const fetchFoodLog = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const dateString = selectedDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      const { data, error } = await supabase
+        .from('food_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('logged_date', dateString)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching food logs:', error);
+        Alert.alert('Error', 'Failed to load food log');
+      } else {
+        setTodayLog(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching food logs:', error);
+      Alert.alert('Error', 'Failed to load food log');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group foods by meal type
+  const groupFoodsByMeal = () => {
+    const grouped = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snack: [],
+    };
+
+    todayLog.forEach(food => {
+      if (grouped[food.meal_type]) {
+        grouped[food.meal_type].push(food);
+      }
+    });
+
+    return grouped;
+  };
+
+  // Calculate calories for each meal
+  const calculateMealCalories = (mealFoods) => {
+    return mealFoods.reduce((sum, food) => sum + food.calories, 0);
+  };
+
+  // Navigate to previous day
+  const goToPreviousDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(newDate);
+  };
+
+  // Navigate to next day
+  const goToNextDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setSelectedDate(newDate);
+  };
+
+  // Go to today
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  // Format date for display
+  const formatDate = (date) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+  };
+
+  // Add food to log in Supabase
+  const addFoodToLog = async (food) => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to log food');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { error } = await supabase
+        .from('food_logs')
+        .insert({
+          user_id: user.id,
+          food_name: food.name,
+          calories: food.calories,
+          meal_type: selectedMeal,
+          logged_date: today,
+        });
+
+      if (error) {
+        console.error('Error adding food log:', error);
+        Alert.alert('Error', 'Failed to log food');
+      } else {
+        // Refresh the food log
+        fetchFoodLog();
+        Alert.alert('Success', 'Food logged successfully!');
+      }
+    } catch (error) {
+      console.error('Error adding food log:', error);
+      Alert.alert('Error', 'Failed to log food');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add manual food entry
+  const addManualFood = async () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to log food');
+      return;
+    }
+
+    if (!manualFood.trim() || !manualCalories.trim()) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { error } = await supabase
+        .from('food_logs')
+        .insert({
+          user_id: user.id,
+          food_name: manualFood.trim(),
+          calories: parseInt(manualCalories),
+          meal_type: selectedMeal,
+          logged_date: today,
+        });
+
+      if (error) {
+        console.error('Error adding manual food log:', error);
+        Alert.alert('Error', 'Failed to log food');
+      } else {
+        // Clear form and refresh
+        setManualFood('');
+        setManualCalories('');
+        setShowManualEntry(false);
+        fetchFoodLog();
+        Alert.alert('Success', 'Food logged successfully!');
+      }
+    } catch (error) {
+      console.error('Error adding manual food log:', error);
+      Alert.alert('Error', 'Failed to log food');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete food log entry
+  const deleteFoodLog = async (foodLogId) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('food_logs')
+        .delete()
+        .eq('id', foodLogId)
+        .eq('user_id', user.id); // Ensure user can only delete their own logs
+
+      if (error) {
+        console.error('Error deleting food log:', error);
+        Alert.alert('Error', 'Failed to delete food log');
+      } else {
+        fetchFoodLog();
+      }
+    } catch (error) {
+      console.error('Error deleting food log:', error);
+      Alert.alert('Error', 'Failed to delete food log');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Mock food database
   const foodDatabase = [
@@ -62,20 +269,6 @@ const LogFoodScreen = () => {
   const dailyGoal = 2000;
   const remainingCalories = dailyGoal - totalCalories;
 
-  const addFoodToLog = food => {
-    const newFood = {
-      id: Date.now(),
-      name: food.name,
-      calories: food.calories,
-      meal: selectedMeal,
-      time: new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    };
-    setTodayLog([...todayLog, newFood]);
-  };
-
   const renderFoodItem = ({ item }) => (
     <TouchableOpacity
       style={styles.foodItem}
@@ -92,15 +285,31 @@ const LogFoodScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderLogItem = ({ item }) => (
-    <View style={styles.logItem}>
-      <View style={styles.logInfo}>
-        <Text style={styles.logFoodName}>{item.name}</Text>
-        <Text style={styles.logTime}>{item.time}</Text>
+  const renderLogItem = ({ item }) => {
+    // Format the created_at time to show when it was logged
+    const loggedTime = new Date(item.created_at).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    return (
+      <View style={styles.logItem}>
+        <View style={styles.logInfo}>
+          <Text style={styles.logFoodName}>{item.food_name}</Text>
+          <Text style={styles.logTime}>{loggedTime}</Text>
+        </View>
+        <View style={styles.logActions}>
+          <Text style={styles.logCalories}>{item.calories} cal</Text>
+          <TouchableOpacity
+            onPress={() => deleteFoodLog(item.id)}
+            disabled={loading}
+          >
+            <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
       </View>
-      <Text style={styles.logCalories}>{item.calories} cal</Text>
-    </View>
-  );
+    );
+  };
 
   const renderMealButton = meal => (
     <TouchableOpacity
@@ -149,28 +358,96 @@ const LogFoodScreen = () => {
           </View>
         </View>
 
+        {/* Date Selector */}
+        <View style={styles.dateSelector}>
+          <TouchableOpacity onPress={goToPreviousDay} disabled={loading}>
+            <Ionicons name="chevron-left" size={24} color="#8E8E93" />
+          </TouchableOpacity>
+          <View style={styles.dateSelectorCenter}>
+            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+            <TouchableOpacity onPress={goToToday} disabled={loading}>
+              <Text style={styles.todayButton}>Today</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={goToNextDay} disabled={loading}>
+            <Ionicons name="chevron-right" size={24} color="#8E8E93" />
+          </TouchableOpacity>
+        </View>
+
         {/* Meal selection */}
         <View style={styles.mealSection}>
           <Text style={styles.sectionTitle}>Select Meal</Text>
           <View style={styles.mealButtons}>{meals.map(renderMealButton)}</View>
         </View>
 
-        {/* Today's Log */}
+        {/* Food Log by Meal */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Log</Text>
+            <Text style={styles.sectionTitle}>Food Log</Text>
             <Text style={styles.remainingCalories}>
               {remainingCalories > 0
                 ? `${remainingCalories} remaining`
                 : `${Math.abs(remainingCalories)} over`}
             </Text>
           </View>
-          <FlatList
-            data={todayLog}
-            renderItem={renderLogItem}
-            keyExtractor={item => item.id.toString()}
-            scrollEnabled={false}
-          />
+          
+          {Object.entries(groupFoodsByMeal()).map(([mealType, foods]) => {
+            if (foods.length === 0) return null;
+            
+            const mealCalories = calculateMealCalories(foods);
+            const mealInfo = meals.find(m => m.id === mealType);
+            
+            return (
+              <View key={mealType} style={styles.mealGroup}>
+                <View style={styles.mealGroupHeader}>
+                  <View style={styles.mealGroupTitle}>
+                    <Ionicons 
+                      name={mealInfo?.icon || 'restaurant'} 
+                      size={20} 
+                      color={mealInfo?.color || '#8E8E93'} 
+                    />
+                    <Text style={styles.mealGroupName}>
+                      {mealInfo?.name || mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+                    </Text>
+                  </View>
+                  <Text style={styles.mealGroupCalories}>{mealCalories} cal</Text>
+                </View>
+                
+                {foods.map((food) => (
+                  <View key={food.id} style={styles.logItem}>
+                    <View style={styles.logInfo}>
+                      <Text style={styles.logFoodName}>{food.food_name}</Text>
+                      <Text style={styles.logTime}>
+                        {new Date(food.created_at).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.logActions}>
+                      <Text style={styles.logCalories}>{food.calories} cal</Text>
+                      <TouchableOpacity
+                        onPress={() => deleteFoodLog(food.id)}
+                        disabled={loading}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+          
+          {todayLog.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="restaurant-outline" size={48} color="#8E8E93" />
+              <Text style={styles.emptyStateText}>No food logged yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Start by adding some food to your log
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Search Food */}
@@ -249,19 +526,12 @@ const LogFoodScreen = () => {
 
             <TouchableOpacity
               style={styles.addFoodButton}
-              onPress={() => {
-                if (manualFood && manualCalories) {
-                  addFoodToLog({
-                    name: manualFood,
-                    calories: parseInt(manualCalories),
-                  });
-                  setManualFood('');
-                  setManualCalories('');
-                  setShowManualEntry(false);
-                }
-              }}
+              onPress={addManualFood}
+              disabled={loading}
             >
-              <Text style={styles.addFoodButtonText}>Add to Log</Text>
+              <Text style={styles.addFoodButtonText}>
+                {loading ? 'Logging...' : 'Add to Log'}
+              </Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -314,6 +584,30 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#F8F9FA',
     flex: 1,
+  },
+  dateSelector: {
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  dateSelectorCenter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  todayButton: {
+    color: '#FF6B35',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  dateText: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   foodCalories: {
     alignItems: 'center',
@@ -393,6 +687,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  logActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
   },
   logTime: {
     color: '#8E8E93',
@@ -511,6 +810,48 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  mealGroup: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    marginBottom: 16,
+    padding: 16,
+  },
+  mealGroupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  mealGroupTitle: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  mealGroupName: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  mealGroupCalories: {
+    color: '#FF6B35',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    color: '#8E8E93',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  emptyStateSubtext: {
+    color: '#8E8E93',
+    fontSize: 14,
+    marginTop: 5,
   },
 });
 

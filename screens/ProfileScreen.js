@@ -7,8 +7,10 @@ import {
   StyleSheet,
   SafeAreaView,
   Switch,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../utils/supabase';
 
 const ProfileScreen = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -92,6 +94,18 @@ const ProfileScreen = () => {
       type: 'navigate',
     },
   ];
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        Alert.alert('Error', error.message);
+      }
+      // The AppNavigator will automatically redirect to auth screen
+    } catch (error) {
+      Alert.alert('Error', 'Failed to sign out');
+    }
+  };
 
   const renderAchievement = achievement => (
     <View key={achievement.id} style={styles.achievementCard}>
@@ -197,7 +211,7 @@ const ProfileScreen = () => {
 
         {/* Logout */}
         <View style={styles.section}>
-          <TouchableOpacity style={styles.logoutButton}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out" size={20} color="#FF3B30" />
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
