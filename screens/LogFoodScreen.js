@@ -345,7 +345,7 @@ const LogFoodScreen = () => {
             {/* Date Selector */}
             <View style={styles.dateSelector}>
               <TouchableOpacity onPress={goToPreviousDay} disabled={loading}>
-                <Ionicons name="chevron-left" size={24} color="#8E8E93" />
+                <Ionicons name="chevron-back" size={24} color="#8E8E93" />
               </TouchableOpacity>
               <View style={styles.dateSelectorCenter}>
                 <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
@@ -354,7 +354,7 @@ const LogFoodScreen = () => {
                 </TouchableOpacity>
               </View>
               <TouchableOpacity onPress={goToNextDay} disabled={loading}>
-                <Ionicons name="chevron-right" size={24} color="#8E8E93" />
+                <Ionicons name="chevron-forward" size={24} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
