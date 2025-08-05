@@ -409,7 +409,13 @@ const LogFoodScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Search Section - Moved here */}
+            {/* Meal selection - Moved above search */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Select Meal</Text>
+              <View style={styles.mealButtons}>{meals.map(renderMealButton)}</View>
+            </View>
+
+            {/* Search Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Search Food</Text>
@@ -499,12 +505,6 @@ const LogFoodScreen = () => {
               )}
             </View>
 
-            {/* Meal selection */}
-            <View style={styles.mealSection}>
-              <Text style={styles.sectionTitle}>Select Meal</Text>
-              <View style={styles.mealButtons}>{meals.map(renderMealButton)}</View>
-            </View>
-
             {/* Food Log by Meal */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -542,18 +542,34 @@ const LogFoodScreen = () => {
                       ref={swipeListRef}
                       data={foods}
                       renderItem={(data, index) => (
-                        <View style={styles.logItem}>
-                          <View style={styles.logInfo}>
+                        <View style={styles.logItemCard}>
+                          <View style={styles.logItemInfo}>
                             <Text style={styles.logFoodName}>{data.item.food_name}</Text>
+                            <View style={styles.logNutritionRow}>
+                              <Text style={styles.logNutritionText}>
+                                {data.item.serving_size || 100}g
+                              </Text>
+                              <View style={styles.logMacroContainer}>
+                                <Text style={[styles.logMacroText, { color: data.item.protein > 10 ? '#34C759' : data.item.protein > 5 ? '#FF9500' : '#FF3B30' }]}>
+                                  P: {data.item.protein || 0}g
+                                </Text>
+                                <Text style={[styles.logMacroText, { color: data.item.carbs > 30 ? '#FF3B30' : data.item.carbs > 15 ? '#FF9500' : '#34C759' }]}>
+                                  C: {data.item.carbs || 0}g
+                                </Text>
+                                <Text style={[styles.logMacroText, { color: data.item.fat > 20 ? '#FF3B30' : data.item.fat > 10 ? '#FF9500' : '#34C759' }]}>
+                                  F: {data.item.fat || 0}g
+                                </Text>
+                                <Text style={[styles.logMacroText, { color: (data.item.calories / (data.item.serving_size || 100)) <= 2.0 ? '#34C759' : (data.item.calories / (data.item.serving_size || 100)) <= 4.0 ? '#FF9500' : '#FF3B30' }]}>
+                                  {data.item.calories} cal
+                                </Text>
+                              </View>
+                            </View>
                             <Text style={styles.logTime}>
                               {new Date(data.item.created_at).toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
                             </Text>
-                          </View>
-                          <View style={styles.logActions}>
-                            <Text style={styles.logCalories}>{data.item.calories} cal</Text>
                           </View>
                         </View>
                       )}
@@ -818,7 +834,9 @@ const styles = StyleSheet.create({
   logFoodName: {
     color: '#1A1A1A',
     fontSize: 16,
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 8,
+    lineHeight: 20,
   },
   logInfo: {
     flex: 1,
@@ -841,6 +859,7 @@ const styles = StyleSheet.create({
   logTime: {
     color: '#8E8E93',
     fontSize: 12,
+    marginTop: 8,
   },
   manualButton: {
     alignItems: 'center',
@@ -1134,6 +1153,73 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   macroText: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+    minWidth: 45,
+    textAlign: 'center',
+  },
+  logItemCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    marginBottom: 8,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  logItemInfo: {
+    flex: 1,
+  },
+  logNutritionRow: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  logNutritionText: {
+    color: '#6C757D',
+    fontSize: 13,
+    fontWeight: '600',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#DEE2E6',
+    minWidth: 50,
+  },
+  logMacroContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  logMacroText: {
     fontSize: 11,
     fontWeight: '700',
     paddingHorizontal: 5,
