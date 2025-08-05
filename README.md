@@ -72,58 +72,36 @@ Future versions may include:
 
 - React Native via **Expo**
 - Supabase (Auth & DB)
+- USDA FoodData Central API (Food Database)
 - Local Notifications
 - Barcode Scanner (future)
 - iOS-first
 
----
+## 🔧 Setup
 
-## 👀 Screens to Build
-
-1. **Welcome / Login**
-2. **Dashboard** (active challenge + stats)
-3. **Log Food**
-4. **Create / Join Challenge**
-5. **Penalty Tracker**
-6. **Settings**
-
----
-
-## 💬 Tagline Ideas
-
-> "Miss your macros? Your buddy pays the price."  
-> "Burpees over burgers."  
-> "Diet together. Suffer together. Win together."
-
----
-
-## 🛠️ Status
-
-Currently under development as an MVP. Focused on:
-
-- Friend-based calorie challenges
-- Penalty gamification
-- Clean, motivating UI
-
----
-
-## Setup
-
-This project is set up with:
-
-- Expo CLI (latest stable version)
-- React Native with JavaScript
-- ESLint with React/React Native rules
-- Prettier for code formatting
-- iOS simulator configuration
-
-## Prerequisites
+### Prerequisites
 
 - macOS with Node.js installed
 - Xcode installed
 - iOS Simulator available
 
-## Getting Started
+### Environment Variables
+
+Create a `.env.local` file in the root directory with:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_KEY=your_supabase_anon_key
+EXPO_PUBLIC_USDA_API_KEY=your_usda_api_key
+```
+
+#### Getting USDA API Key
+
+1. Sign up for a free API key at [data.gov](https://api.data.gov/signup/)
+2. Add the key to your `.env.local` file as `EXPO_PUBLIC_USDA_API_KEY`
+3. The app will use `DEMO_KEY` as fallback (limited to 1,000 requests/hour)
+
+### Installation
 
 1. Install dependencies:
 

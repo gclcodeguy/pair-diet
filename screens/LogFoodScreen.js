@@ -10,22 +10,29 @@ import {
   FlatList,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SwipeListView } from 'react-native-swipe-list-view';
 import { supabase } from '../utils/supabase';
+import usdaApi from '../utils/usdaApi';
 
 const LogFoodScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualFood, setManualFood] = useState('');
   const [manualCalories, setManualCalories] = useState('');
+  const [manualProtein, setManualProtein] = useState('');
+  const [manualCarbs, setManualCarbs] = useState('');
+  const [manualFat, setManualFat] = useState('');
   const [selectedMeal, setSelectedMeal] = useState('breakfast');
   const [todayLog, setTodayLog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const swipeListRef = useRef(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Get current user on component mount
   useEffect(() => {
@@ -155,6 +162,10 @@ const LogFoodScreen = () => {
           user_id: user.id,
           food_name: food.name,
           calories: food.calories,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat,
+          fiber: food.fiber,
           meal_type: selectedMeal,
           logged_date: today,
         });
@@ -183,7 +194,7 @@ const LogFoodScreen = () => {
     }
 
     if (!manualFood.trim() || !manualCalories.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please fill in food name and calories');
       return;
     }
 
@@ -196,7 +207,10 @@ const LogFoodScreen = () => {
         .insert({
           user_id: user.id,
           food_name: manualFood.trim(),
-          calories: parseInt(manualCalories),
+          calories: parseInt(manualCalories) || 0,
+          protein: parseInt(manualProtein) || 0,
+          carbs: parseInt(manualCarbs) || 0,
+          fat: parseInt(manualFat) || 0,
           meal_type: selectedMeal,
           logged_date: today,
         });
@@ -208,6 +222,9 @@ const LogFoodScreen = () => {
         // Clear form and refresh
         setManualFood('');
         setManualCalories('');
+        setManualProtein('');
+        setManualCarbs('');
+        setManualFat('');
         setShowManualEntry(false);
         fetchFoodLog();
         Alert.alert('Success', 'Food logged successfully!');
@@ -248,6 +265,39 @@ const LogFoodScreen = () => {
       setLoading(false);
     }
   };
+
+  // Search USDA foods
+  const searchUSDAFoods = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      const results = await usdaApi.searchFoods(query, { pageSize: 10 });
+      setSearchResults(results);
+    } catch (error) {
+      console.error('USDA search error:', error);
+      Alert.alert('Search Error', 'Failed to search foods. Please try again.');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Debounced search to avoid too many API calls
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim().length >= 2) {
+        searchUSDAFoods(searchQuery);
+      } else {
+        setSearchResults([]);
+      }
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   // Mock food database
   const foodDatabase = [
@@ -358,6 +408,96 @@ const LogFoodScreen = () => {
               </TouchableOpacity>
             </View>
 
+            {/* Search Section - Moved here */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Search Food</Text>
+                <TouchableOpacity
+                  style={styles.manualEntryButton}
+                  onPress={() => setShowManualEntry(true)}
+                >
+                  <Text style={styles.manualEntryText}>+ Manual Entry</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color="#8E8E93" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search for food..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              {searchQuery.length > 0 && (
+                <View style={styles.searchResults}>
+                  {searchLoading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#FF6B35" />
+                      <Text style={styles.loadingText}>Searching USDA database...</Text>
+                    </View>
+                  ) : searchResults.length > 0 ? (
+                    <View style={styles.searchResultsList}>
+                      {searchResults.map((food, index) => (
+                        <TouchableOpacity
+                          key={food.id || index}
+                          style={styles.searchResultItem}
+                          onPress={() => {
+                            addFoodToLog({
+                              name: food.name,
+                              calories: food.calories,
+                              protein: food.protein,
+                              carbs: food.carbs,
+                              fat: food.fat,
+                              fiber: food.fiber,
+                              brand: food.brand,
+                              category: food.category
+                            });
+                            setSearchQuery('');
+                            setSearchResults([]);
+                          }}
+                        >
+                          <View style={styles.searchResultInfo}>
+                            <Text style={styles.searchResultName}>{food.name}</Text>
+                            <View style={styles.nutritionRow}>
+                              <Text style={styles.nutritionText}>
+                                {food.servingSize || 100}g
+                              </Text>
+                              <View style={styles.macroContainer}>
+                                <Text style={[styles.macroText, { color: food.nutritionScores?.protein?.color || '#8E8E93' }]}>
+                                  P: {Math.round(food.protein)}g
+                                </Text>
+                                <Text style={[styles.macroText, { color: food.nutritionScores?.carbs?.color || '#8E8E93' }]}>
+                                  C: {Math.round(food.carbs)}g
+                                </Text>
+                                <Text style={[styles.macroText, { color: food.nutritionScores?.fat?.color || '#8E8E93' }]}>
+                                  F: {Math.round(food.fat)}g
+                                </Text>
+                                <Text style={[styles.macroText, { color: food.nutritionScores?.calories?.color || '#8E8E93' }]}>
+                                  {Math.round(food.calories)} cal
+                                </Text>
+                              </View>
+                            </View>
+                            {food.brand && (
+                              <Text style={styles.searchResultBrand}>{food.brand}</Text>
+                            )}
+                            <Text style={styles.searchResultCategory}>{food.category}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : searchQuery.trim().length >= 2 ? (
+                    <View style={styles.emptySearchState}>
+                      <Ionicons name="search-outline" size={24} color="#8E8E93" />
+                      <Text style={styles.emptySearchText}>No foods found</Text>
+                      <Text style={styles.emptySearchSubtext}>Try a different search term</Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </View>
+
             {/* Meal selection */}
             <View style={styles.mealSection}>
               <Text style={styles.sectionTitle}>Select Meal</Text>
@@ -453,43 +593,6 @@ const LogFoodScreen = () => {
                 </View>
               )}
             </View>
-
-            {/* Search Food */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Search Food</Text>
-                <TouchableOpacity
-                  style={styles.manualButton}
-                  onPress={() => setShowManualEntry(true)}
-                >
-                  <Ionicons name="add" size={20} color="#FF6B35" />
-                  <Text style={styles.manualButtonText}>Manual Entry</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.searchContainer}>
-                <Ionicons
-                  name="search"
-                  size={20}
-                  color="#8E8E93"
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search for food..."
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-              </View>
-
-              <FlatList
-                data={filteredFood}
-                renderItem={renderFoodItem}
-                keyExtractor={item => item.id.toString()}
-                scrollEnabled={false}
-                style={styles.foodList}
-              />
-            </View>
           </>
         )}
         keyExtractor={(item) => item.key}
@@ -528,6 +631,39 @@ const LogFoodScreen = () => {
                 value={manualCalories}
                 onChangeText={setManualCalories}
                 placeholder="e.g., 350"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Protein (g)</Text>
+              <TextInput
+                style={styles.input}
+                value={manualProtein}
+                onChangeText={setManualProtein}
+                placeholder="e.g., 25"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Carbs (g)</Text>
+              <TextInput
+                style={styles.input}
+                value={manualCarbs}
+                onChangeText={setManualCarbs}
+                placeholder="e.g., 30"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Fat (g)</Text>
+              <TextInput
+                style={styles.input}
+                value={manualFat}
+                onChangeText={setManualFat}
+                placeholder="e.g., 10"
                 keyboardType="numeric"
               />
             </View>
@@ -871,6 +1007,147 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
+  },
+  searchResults: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    marginTop: 10,
+    padding: 10,
+    maxHeight: 300,
+    overflow: 'hidden',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    marginTop: 10,
+  },
+  searchResultsList: {
+    maxHeight: 280,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchResultInfo: {
+    flex: 1,
+  },
+  searchResultName: {
+    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  searchResultBrand: {
+    color: '#8E8E93',
+    fontSize: 14,
+  },
+  searchResultCategory: {
+    color: '#8E8E93',
+    fontSize: 12,
+  },
+  searchResultCalories: {
+    color: '#FF6B35',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptySearchState: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptySearchText: {
+    color: '#8E8E93',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  emptySearchSubtext: {
+    color: '#8E8E93',
+    fontSize: 14,
+    marginTop: 5,
+  },
+  manualEntryButton: {
+    backgroundColor: '#FF6B35',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  manualEntryText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  nutritionRow: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  nutritionText: {
+    color: '#6C757D',
+    fontSize: 13,
+    fontWeight: '600',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#DEE2E6',
+    minWidth: 50,
+  },
+  macroContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  macroText: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+    minWidth: 45,
+    textAlign: 'center',
   },
 });
 
