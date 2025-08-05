@@ -161,11 +161,11 @@ const LogFoodScreen = () => {
         .insert({
           user_id: user.id,
           food_name: food.name,
-          calories: food.calories,
-          protein: food.protein,
-          carbs: food.carbs,
-          fat: food.fat,
-          fiber: food.fiber,
+          calories: Math.round(food.calories),
+          protein: Math.round(food.protein),
+          carbs: Math.round(food.carbs),
+          fat: Math.round(food.fat),
+          fiber: Math.round(food.fiber),
           meal_type: selectedMeal,
           logged_date: today,
         });
@@ -211,6 +211,7 @@ const LogFoodScreen = () => {
           protein: parseInt(manualProtein) || 0,
           carbs: parseInt(manualCarbs) || 0,
           fat: parseInt(manualFat) || 0,
+          fiber: 0, // Manual entries don't typically include fiber
           meal_type: selectedMeal,
           logged_date: today,
         });
