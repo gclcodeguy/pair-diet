@@ -10,7 +10,10 @@
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "seed-foods": "node scripts/seedFoodCache.js",
+    "import-foods": "node scripts/importFullDatabase.js",
+    "extract-5k": "node scripts/extract5KFoods.js"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.2",
@@ -20,6 +23,7 @@
     "@react-navigation/native": "^7.1.16",
     "@react-navigation/stack": "^7.4.4",
     "@supabase/supabase-js": "^2.52.1",
+    "csv-parser": "^3.2.0",
     "expo": "~53.0.20",
     "expo-dev-client": "~5.2.4",
     "expo-status-bar": "~2.2.3",

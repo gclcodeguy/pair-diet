@@ -12,10 +12,12 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+// Barcode scanner temporarily disabled due to build issues
+const BarCodeScanner = null;
 import { Ionicons } from '@expo/vector-icons';
 import { SwipeListView } from 'react-native-swipe-list-view';
 import { supabase } from '../utils/supabase';
-import usdaApi from '../utils/usdaApi';
+import hybridFoodSearch from '../utils/hybridFoodSearch';
 
 const LogFoodScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,10 +35,14 @@ const LogFoodScreen = () => {
   const swipeListRef = useRef(null);
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [hasPermission, setHasPermission] = useState(null);
+  const [barcodeScanning, setBarcodeScanning] = useState(false);
 
-  // Get current user on component mount
+  // Get current user and camera permissions on component mount
   useEffect(() => {
     getCurrentUser();
+    getCameraPermissions();
   }, []);
 
   // Fetch food log when user or date changes
@@ -52,6 +58,20 @@ const LogFoodScreen = () => {
       setUser(user);
     } catch (error) {
       console.error('Error getting user:', error);
+    }
+  };
+
+  const getCameraPermissions = async () => {
+    if (!BarCodeScanner) {
+      setHasPermission(false);
+      return;
+    }
+    try {
+      const { status } = await BarCodeScanner.requestPermissionsAsync();
+      setHasPermission(status === 'granted');
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      setHasPermission(false);
     }
   };
 
@@ -267,8 +287,8 @@ const LogFoodScreen = () => {
     }
   };
 
-  // Search USDA foods
-  const searchUSDAFoods = async (query) => {
+  // Search foods using hybrid system (cache + API)
+  const searchFoods = async (query) => {
     if (!query || query.trim().length < 2) {
       setSearchResults([]);
       return;
@@ -276,10 +296,48 @@ const LogFoodScreen = () => {
 
     try {
       setSearchLoading(true);
-      const results = await usdaApi.searchFoods(query, { pageSize: 10 });
-      setSearchResults(results);
+      const searchResponse = await hybridFoodSearch.searchFoods(query, { limit: 10 });
+      
+      // Convert to format expected by UI
+      const formattedResults = searchResponse.results.map(food => ({
+        id: food.food_id,
+        name: food.food_name,
+        brand: food.brand,
+        category: food.category,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        fiber: food.fiber,
+        servingSize: food.serving_size,
+        servingUnit: food.serving_unit,
+        source: food.source || 'cache',
+        // Add nutrition scores for color coding
+        nutritionScores: {
+          protein: {
+            color: food.protein >= 20 ? '#34C759' : food.protein >= 10 ? '#FF9500' : '#FF3B30'
+          },
+          carbs: {
+            color: food.carbs >= 60 ? '#FF3B30' : food.carbs >= 30 ? '#FF9500' : '#34C759'
+          },
+          fat: {
+            color: food.fat >= 40 ? '#FF3B30' : food.fat >= 20 ? '#FF9500' : '#34C759'
+          },
+          calories: {
+            color: (food.calories / food.serving_size) <= 2.0 ? '#34C759' : 
+                   (food.calories / food.serving_size) <= 4.0 ? '#FF9500' : '#FF3B30'
+          }
+        }
+      }));
+
+      setSearchResults(formattedResults);
+      
+      // Log search performance for debugging
+      console.log(`Search "${query}": ${searchResponse.results.length} results from ${searchResponse.source} 
+        (Cache: ${searchResponse.cacheHits || 0}, API: ${searchResponse.apiHits || 0})`);
+      
     } catch (error) {
-      console.error('USDA search error:', error);
+      console.error('Food search error:', error);
       Alert.alert('Search Error', 'Failed to search foods. Please try again.');
       setSearchResults([]);
     } finally {
@@ -291,14 +349,122 @@ const LogFoodScreen = () => {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (searchQuery.trim().length >= 2) {
-        searchUSDAFoods(searchQuery);
+        searchFoods(searchQuery);
       } else {
         setSearchResults([]);
       }
-    }, 500); // 500ms delay
+    }, 300); // Reduced delay since cache searches are fast
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
+
+  // Handle barcode scan
+  const handleBarCodeScanned = async ({ type, data }) => {
+    setBarcodeScanning(true);
+    
+    try {
+      console.log(`Barcode scanned: ${data} (${type})`);
+      
+      // Search for the product by barcode
+      const searchResult = await hybridFoodSearch.searchByBarcode(data);
+      
+      if (searchResult.result) {
+        const food = searchResult.result;
+        
+        // Show confirmation dialog with food details
+        Alert.alert(
+          'Product Found!',
+          `${food.food_name}${food.brand ? ` (${food.brand})` : ''}\n\nCalories: ${food.calories}\nProtein: ${food.protein}g\nCarbs: ${food.carbs}g\nFat: ${food.fat}g\n\nSource: ${searchResult.source === 'cache' ? 'Cached' : 'Open Food Facts'}`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Add to Log',
+              onPress: () => {
+                addFoodToLog({
+                  name: food.food_name,
+                  calories: food.calories,
+                  protein: food.protein,
+                  carbs: food.carbs,
+                  fat: food.fat,
+                  fiber: food.fiber,
+                  brand: food.brand,
+                  category: food.category
+                });
+                setShowBarcodeScanner(false);
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Product Not Found',
+          `Barcode ${data} was not found in the food database. You can add it manually.`,
+          [
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+            {
+              text: 'Manual Entry',
+              onPress: () => {
+                setShowBarcodeScanner(false);
+                setShowManualEntry(true);
+              },
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Barcode search error:', error);
+      Alert.alert(
+        'Search Error',
+        'Failed to search for this product. Please try again or add manually.',
+        [
+          {
+            text: 'OK',
+            style: 'cancel',
+          },
+          {
+            text: 'Manual Entry',
+            onPress: () => {
+              setShowBarcodeScanner(false);
+              setShowManualEntry(true);
+            },
+          },
+        ]
+      );
+    } finally {
+      setBarcodeScanning(false);
+    }
+  };
+
+  // Open barcode scanner
+  const openBarcodeScanner = () => {
+    if (!BarCodeScanner) {
+      Alert.alert(
+        'Barcode Scanner Unavailable', 
+        'Barcode scanning is not available on this device. Please use manual entry or text search instead.',
+        [{ text: 'OK', onPress: () => setShowManualEntry(true) }]
+      );
+      return;
+    }
+    
+    if (hasPermission === null) {
+      Alert.alert('Permission Required', 'Camera permission is required to scan barcodes.');
+      getCameraPermissions();
+      return;
+    }
+    
+    if (hasPermission === false) {
+      Alert.alert('No Camera Access', 'Please grant camera permission in your device settings to use barcode scanning.');
+      return;
+    }
+    
+    setShowBarcodeScanner(true);
+  };
 
   // Mock food database
   const foodDatabase = [
@@ -419,12 +585,23 @@ const LogFoodScreen = () => {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Search Food</Text>
-                <TouchableOpacity
-                  style={styles.manualEntryButton}
-                  onPress={() => setShowManualEntry(true)}
-                >
-                  <Text style={styles.manualEntryText}>+ Manual Entry</Text>
-                </TouchableOpacity>
+                <View style={styles.headerButtons}>
+                  {BarCodeScanner && (
+                    <TouchableOpacity
+                      style={styles.scanButton}
+                      onPress={openBarcodeScanner}
+                    >
+                      <Ionicons name="scan" size={16} color="#FFF" />
+                      <Text style={styles.scanButtonText}>Scan</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.manualEntryButton}
+                    onPress={() => setShowManualEntry(true)}
+                  >
+                    <Text style={styles.manualEntryText}>+ Manual</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.searchContainer}>
@@ -442,7 +619,7 @@ const LogFoodScreen = () => {
                   {searchLoading ? (
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator size="small" color="#FF6B35" />
-                      <Text style={styles.loadingText}>Searching USDA database...</Text>
+                      <Text style={styles.loadingText}>Searching food database...</Text>
                     </View>
                   ) : searchResults.length > 0 ? (
                     <View style={styles.searchResultsList}>
@@ -695,6 +872,59 @@ const LogFoodScreen = () => {
               </Text>
             </TouchableOpacity>
           </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showBarcodeScanner}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <SafeAreaView style={styles.barcodeContainer}>
+          <View style={styles.barcodeHeader}>
+            <Text style={styles.barcodeTitle}>Scan Barcode</Text>
+            <TouchableOpacity onPress={() => setShowBarcodeScanner(false)}>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+
+          {hasPermission && BarCodeScanner ? (
+            <View style={styles.barcodeScanner}>
+              <BarCodeScanner
+                onBarCodeScanned={barcodeScanning ? undefined : handleBarCodeScanned}
+                style={StyleSheet.absoluteFillObject}
+              />
+              
+              {/* Scanning overlay */}
+              <View style={styles.barcodeOverlay}>
+                <View style={styles.barcodeBorder} />
+                <Text style={styles.barcodeInstructions}>
+                  Position the barcode inside the frame
+                </Text>
+                {barcodeScanning && (
+                  <View style={styles.barcodeLoadingContainer}>
+                    <ActivityIndicator size="large" color="#FF6B35" />
+                    <Text style={styles.barcodeLoadingText}>Searching...</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.barcodePermissionContainer}>
+              <Ionicons name="camera-outline" size={64} color="#8E8E93" />
+              <Text style={styles.barcodePermissionText}>Camera Permission Required</Text>
+              <Text style={styles.barcodePermissionSubtext}>
+                To scan barcodes, please grant camera access in your device settings.
+              </Text>
+              <TouchableOpacity 
+                style={styles.permissionButton} 
+                onPress={getCameraPermissions}
+              >
+                <Text style={styles.permissionButtonText}>Request Permission</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -1235,6 +1465,116 @@ const styles = StyleSheet.create({
     elevation: 1,
     minWidth: 45,
     textAlign: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scanButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  scanButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  barcodeContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  barcodeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  barcodeTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  barcodeScanner: {
+    flex: 1,
+    position: 'relative',
+  },
+  barcodeOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  barcodeBorder: {
+    width: 250,
+    height: 150,
+    borderWidth: 2,
+    borderColor: '#FF6B35',
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  barcodeInstructions: {
+    color: '#FFF',
+    fontSize: 16,
+    marginTop: 20,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  barcodeLoadingContainer: {
+    position: 'absolute',
+    bottom: 100,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 30,
+    paddingVertical: 20,
+    borderRadius: 12,
+  },
+  barcodeLoadingText: {
+    color: '#FFF',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  barcodePermissionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    backgroundColor: '#F8F9FA',
+  },
+  barcodePermissionText: {
+    color: '#1A1A1A',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  barcodePermissionSubtext: {
+    color: '#8E8E93',
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  permissionButton: {
+    backgroundColor: '#FF6B35',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    marginTop: 30,
+  },
+  permissionButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
